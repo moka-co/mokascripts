@@ -1,26 +1,28 @@
 #! /usr/bin/bash
 
-
 # Run with sudo permissions
 # Script made 4 Ubuntu, tested with 22.04
 
 # Assuming you're installing docker under /home/<your-user> 
+# This script doesn't work if you don't login with ssh as `ssh username@hostname`
 # You can change the directory later
 
 sudo apt update
-sudo apt install uidmap dbus-user-session
+sudo apt install uidmap dbus-user-session fuse-overlayfs -y
 
-if [[ $(sudo systemctl status docker.service) -ne 0 ]]; then
-  sudo systemctl disable --now docker.service docker.socket
-fi
+sudo -l > /dev/null
 
-export PATH=/home/$(whoami)/bin:$PATH
-export DOCKER_HOST=unix:///run/user/1000/docker.sock
+sudo loginctl enable-linger $(whoami)
 
-sudo loginctl enable-linger 
+echo "####" >> .profile
+echo "export PATH=/home/$(whoami)/bin:\$PATH" >> .profile
+echo "export DOCKER_HOST=unix:///run/user/1000/docker.sock" >> .profile
+echo "export XDG_RUNTIME_DIR=/run/user/\$UID" >> .profile
 
-export XDG_RUNTIME_DIR=/run/usr/$UID
+source .profile
 
-systemctl --user start docker
+curl -fsSL https://get.docker.com/rootless | bash
 
-systemctl --user enable docker
+systemctl --user daemon-reload
+systemctl --user start docker && docker run hello-world
+
