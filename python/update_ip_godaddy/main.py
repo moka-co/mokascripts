@@ -1,0 +1,1 @@
+# A simple script that updates godaddy 
