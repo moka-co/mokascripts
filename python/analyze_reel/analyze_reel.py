@@ -14,7 +14,7 @@ from PIL import Image
 # Configuration - Ensure OPENROUTER_API_KEY is set in your environment variables
 load_dotenv()
 API_KEY = os.getenv("OPENROUTER_API_KEY")
-MODEL = "google/gemini-2.5-flash"
+MODEL = "google/gemini-3.1-flash-lite"
 TEMP_VIDEO_PATH = "temp_reel.mp4"
 TARGET_DIR = "downloaded_content"
 
@@ -72,7 +72,7 @@ def download_instagram_content(url):
         except Exception as e:
             print(f"[!] Cookie warning: {e}. Attempting without session...")
 
-    print(f"[*] Fetching metadata for shortcode: {shortcode}")
+    print(f"[*] Fetching metadata for shortcode: {shortcode}\n")
     try:
         post = instaloader.Post.from_shortcode(L.context, shortcode)
         L.download_post(post, target=TARGET_DIR)
@@ -114,11 +114,24 @@ def analyze_content(content_type, file_paths):
     print(f"[*] Preparing OpenRouter payload for {content_type}...")
     
     prompt = (
-        "Analyze this technical content and extract information using this exact structure:\n"
-        "1. **Main Topic**: (What is this about? e.g., a new AI tool, keyboard shortcut, dev tip)\n"
-        "2. **Key Points Explained**: (Bullet points of the concepts or steps shown across the slides/video)\n"
-        "3. **Tools Mentioned**: (Exact transcription of any repo names or URLs visible)\n"
-        "Keep it highly technical, objective, and straight to the point. Focus on concepts rather than code"
+        "Analyze this technical content and produce a structured summary in this exact format:\n\n"
+        "Main Topic: (One-line description of the core subject)\n\n"
+        "Key Points Explained\n\n"
+        "(3-5 bullet points. Each bullet must start with a short descriptive label followed by a colon, "
+        "then a concise explanation. Example: '* Hot Reload: Saves changes instantly without restarting the server.')\n\n"
+        "Tools Mentioned\n\n"
+        "(List tools grouped by type. Use these categories only when applicable:\n"
+        "- GitHub Repository: https://url \n"
+        "- Tools / CLIs: tool1, tool2\n"
+        "- Libraries / Frameworks: lib1, lib2\n"
+        "- Hardware / Devices: device1\n"
+        "- Other: anything that doesn't fit above\n\n"
+        "Rules:\n"
+        "- No nested bold inside bullet points\n"
+        "- Be technical, specific, and concise\n"
+        "- Focus on concepts and tools, not on code\n"
+        "- Reproduce exact repo names and URLs as markdown hyperlinks\n"
+        "- Include version numbers or model sizes when visible (e.g. Python 3.12, Node 20)"
     )
 
     # Base structure of the message content
