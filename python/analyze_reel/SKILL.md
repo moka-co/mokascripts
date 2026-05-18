@@ -1,6 +1,6 @@
 ---
 name: analyze-reel
-description: Analyze Instagram Reels to extract technical concepts, code, and summaries. Use when a user provides an Instagram Reel URL and wants a technical analysis of its content.
+description: Analyze Instagram Reels to extract technical concepts, tools, and summaries. Use when a user provides an Instagram Reel URL and wants a technical analysis of its content.
 ---
 
 # Analyze Reel
