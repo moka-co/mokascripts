@@ -9,6 +9,7 @@ import re
 import shutil
 import glob
 from dotenv import load_dotenv
+from PIL import Image
 
 # Configuration - Ensure OPENROUTER_API_KEY is set in your environment variables
 load_dotenv()
@@ -20,6 +21,25 @@ TARGET_DIR = "downloaded_content"
 if not API_KEY:
     print("Error: OPENROUTER_API_KEY environment variable is not set.")
     sys.exit(1)
+
+def compress_video(input_path, output_path, bitrate="500k", resolution="720x480"):
+    """Compress video to reduce file size and token usage"""
+    cmd = [
+        "ffmpeg", "-i", input_path,
+        "-b:v", bitrate,  # Lower bitrate = smaller file
+        "-s", resolution,  # Reduce resolution
+        "-c:v", "libx264",
+        "-preset", "fast",
+        output_path
+    ]
+    subprocess.run(cmd, check=True, capture_output=True)
+    print(f"[+] Compressed video: {input_path} → {output_path}")
+
+def compress_image(input_path, output_path, quality=60):
+    """Reduce JPEG quality to save tokens"""
+    img = Image.open(input_path)
+    img.save(output_path, "JPEG", quality=quality, optimize=True)
+    print(f"[+] Compressed image: {input_path}")
 
 def download_instagram_content(url):
     """Downloads content and returns a tuple: (content_type, [list_of_filepaths])"""
@@ -97,8 +117,8 @@ def analyze_content(content_type, file_paths):
         "Analyze this technical content and extract information using this exact structure:\n"
         "1. **Main Topic**: (What is this about? e.g., a new AI tool, keyboard shortcut, dev tip)\n"
         "2. **Key Points Explained**: (Bullet points of the concepts or steps shown across the slides/video)\n"
-        "3. **Tools Mentioned**: (Exact transcription of any Repo names or URLs visible)\n"
-        "Keep it highly technical, objective, and straight to the point."
+        "3. **Tools Mentioned**: (Exact transcription of any repo names or URLs visible)\n"
+        "Keep it highly technical, objective, and straight to the point. Focus on concepts rather than code"
     )
 
     # Base structure of the message content
@@ -126,7 +146,8 @@ def analyze_content(content_type, file_paths):
     }
     payload = {
         "model": MODEL,
-        "messages": [{"role": "user", "content": message_content}]
+        "messages": [{"role": "user", "content": message_content}],
+        "temperature" : 0.2
     }
 
     response = None
@@ -149,6 +170,20 @@ def main():
     
     try:
         content_type, files = download_instagram_content(url)
+
+        # Compression
+        if content_type == "video":
+            compressed = os.path.join(TARGET_DIR, "temp_compressed.mp4")
+            compress_video(files[0], compressed, bitrate="400k", resolution="720x480")
+            files = [compressed]
+        elif content_type == "carousel":
+            compressed_files = []
+            for f in files:
+                out = f.replace(".jpg", "_compressed.jpg")
+                compress_image(f, out, quality=65)
+                compressed_files.append(out)
+            files = compressed_files
+
         analysis = analyze_content(content_type, files)
         
         print("\n================ ANALYSIS RESULT ================\n")
@@ -156,9 +191,10 @@ def main():
         print("\n=================================================\n")
         
     finally:
-        # Clean up the downloaded file to keep the container/host clean
+        # Clean up the downloaded content directory (includes compressed files)
         if os.path.exists(TARGET_DIR):
             shutil.rmtree(TARGET_DIR)
+
 
 if __name__ == "__main__":
     main()
