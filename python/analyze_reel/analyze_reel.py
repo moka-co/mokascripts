@@ -121,7 +121,7 @@ def analyze_content(content_type, file_paths):
         "then a concise explanation. Example: '* Hot Reload: Saves changes instantly without restarting the server.')\n\n"
         "Tools Mentioned\n\n"
         "(List tools grouped by type. Use these categories only when applicable:\n"
-        "- GitHub Repository: https://url
+        "- GitHub Repository: https://url\n"
         "- Tools / CLIs: tool1, tool2\n"
         "- Libraries / Frameworks: lib1, lib2\n"
         "- Hardware / Devices: device1\n"
