@@ -33,7 +33,7 @@ def compress_video(input_path, output_path, bitrate="500k", resolution="720x480"
         output_path
     ]
     subprocess.run(cmd, check=True, capture_output=True)
-    print(f"[+] Compressed video: {input_path} → {output_path}")
+    print(f"[+] Compressed video: {input_path} -> {output_path}")
 
 def compress_image(input_path, output_path, quality=60):
     """Reduce JPEG quality to save tokens"""
