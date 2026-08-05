@@ -8,6 +8,7 @@ import instaloader
 import re
 import shutil
 import glob
+import http.cookiejar
 from dotenv import load_dotenv
 from PIL import Image
 
@@ -15,7 +16,6 @@ from PIL import Image
 load_dotenv()
 API_KEY = os.getenv("OPENROUTER_API_KEY")
 MODEL = "google/gemini-3.1-flash-lite"
-TEMP_VIDEO_PATH = "temp_reel.mp4"
 TARGET_DIR = "downloaded_content"
 
 if not API_KEY:
@@ -68,7 +68,11 @@ def download_instagram_content(url):
     if os.path.exists(cookie_path):
         try:
             # Replace with your actual username or a dummy string depending on cookie type
-            L.load_session_from_file("instagram_session", filename=cookie_path)
+            #L.load_session_from_file("instagram_session", filename=cookie_path)
+            cj = http.cookiejar.MozillaCookieJar(cookie_path)
+            cj.load(ignore_discard=True, ignore_expires=True)
+            L.context._session.cookies.update(cj)
+
         except Exception as e:
             print(f"[!] Cookie warning: {e}. Attempting without session...")
 
