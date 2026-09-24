@@ -1,4 +1,5 @@
 import os
+import io
 import sys
 import base64
 import json
@@ -11,6 +12,10 @@ import glob
 import http.cookiejar
 from dotenv import load_dotenv
 from PIL import Image
+from typing import Any 
+
+if sys.platform == "win32" and isinstance(sys.stdout, io.TextIOWrapper):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 # Configuration - Ensure OPENROUTER_API_KEY is set in your environment variables
 load_dotenv()
@@ -40,6 +45,42 @@ def compress_image(input_path, output_path, quality=60):
     img = Image.open(input_path)
     img.save(output_path, "JPEG", quality=quality, optimize=True)
     print(f"[+] Compressed image: {input_path}")
+
+def download_facebook_content(url):
+    """Downloads Facebook content using yt-dlp and returns a tuple: (content_type, [list_of_filepaths])"""
+    if os.path.exists(TARGET_DIR):
+        shutil.rmtree(TARGET_DIR)
+    os.makedirs(TARGET_DIR, exist_ok=True)
+
+    output_template = os.path.join(TARGET_DIR, "%(id)s.%(ext)s")
+    print(f"[*] Fetching Facebook content from: {url}\n")
+    try:
+        cmd = [
+            "yt-dlp",
+            "--no-playlist",
+            "-f", "b/bestvideo+bestaudio/best",
+            "--merge-output-format", "mp4",
+            "-o", output_template,
+            url
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"[-] yt-dlp failed: {result.stderr or result.stdout}")
+            sys.exit(1)
+
+        videos = glob.glob(os.path.join(TARGET_DIR, "*.mp4"))
+        if not videos:
+            videos = glob.glob(os.path.join(TARGET_DIR, "*.*"))
+        if videos:
+            print("[+] Facebook video/reel detected.")
+            return "video", [videos[0]]
+        else:
+            print("[-] Error: No video files found after download.")
+            sys.exit(1)
+    except Exception as e:
+        print(f"[-] Facebook download failed: {e}")
+        sys.exit(1)
+
 
 def download_instagram_content(url):
     """Downloads content and returns a tuple: (content_type, [list_of_filepaths])"""
@@ -139,7 +180,7 @@ def analyze_content(content_type, file_paths):
     )
 
     # Base structure of the message content
-    message_content = [{"type": "text", "text": prompt}]
+    message_content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
 
     # Build payload dynamically based on assumption type
     if content_type == "video":
