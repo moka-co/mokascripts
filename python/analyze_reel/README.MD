@@ -20,3 +20,11 @@ python >=3.11
 ```
 python analyze_reel.py <url>
 ```
+
+### Local mode
+Downloads the post and prepares it for analysis by an agent (e.g. Claude) without calling OpenRouter:
+```
+python analyze_reel.py <url> --local --out <dir>
+```
+It saves the media, the caption (`caption.txt`), up to 20 frames (`frames/`) and a `manifest.json`.
+If `faster-whisper` is installed (`pip install faster-whisper`) the audio is also transcribed into `transcript.txt`.
