@@ -23,6 +23,29 @@ API_KEY = os.getenv("OPENROUTER_API_KEY")
 MODEL = "google/gemini-3.1-flash-lite"
 TARGET_DIR = "downloaded_content"
 MAX_FRAMES = 20
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Resolved next to the script (not the cwd) so it works wherever the skill is launched from.
+COOKIE_PATH = os.getenv("INSTAGRAM_COOKIES_PATH") or os.path.join(SCRIPT_DIR, "instagram_cookies.txt")
+COOKIES_MISSING_EXIT_CODE = 3
+USE_COOKIES = True  # set to False by --no-cookie
+
+def is_facebook_url(url):
+    return bool(re.search(r"(facebook\.com|fb\.watch)", url))
+
+def require_instagram_cookies():
+    """Refuses to run for Instagram URLs when the cookie file is missing."""
+    if os.path.isfile(COOKIE_PATH):
+        return
+    print("[-] COOKIES_MISSING: Instagram cookie file not found.")
+    print(f"    Expected at: {COOKIE_PATH}\n")
+    print("    How to create it:")
+    print("    1. Log in to instagram.com in your browser.")
+    print("    2. Install a cookie manager extension (e.g. Cookie-Editor).")
+    print("    3. Export the cookies in Netscape format.")
+    print("    4. Save the exported text into the file above (or paste it in the chat")
+    print("       and ask the agent to save it for you).")
+    print("    Alternative: run `python extract_cookie.py` and paste the cookie strings one by one.")
+    sys.exit(COOKIES_MISSING_EXIT_CODE)
 
 def compress_video(input_path, output_path, bitrate="500k", resolution="720x480"):
     """Compress video to reduce file size and token usage"""
@@ -43,7 +66,7 @@ def compress_image(input_path, output_path, quality=60):
     img.save(output_path, "JPEG", quality=quality, optimize=True)
     print(f"[+] Compressed image: {input_path}")
 
-def download_facebook_content(url, target_dir=TARGET_DIR):
+def download_facebook_content(url, target_dir=TARGET_DIR, cookies=None):
     """Downloads Facebook content using yt-dlp and returns a tuple: (content_type, [list_of_filepaths])"""
     if os.path.exists(target_dir):
         shutil.rmtree(target_dir)
@@ -55,6 +78,7 @@ def download_facebook_content(url, target_dir=TARGET_DIR):
         cmd = [
             "yt-dlp",
             "--no-playlist",
+            *(["--cookies", cookies] if cookies else []),
             "-f", "b/bestvideo+bestaudio/best",
             "--merge-output-format", "mp4",
             "--write-description",
@@ -108,8 +132,8 @@ def download_instagram_content(url, target_dir=TARGET_DIR):
     )
     
     # Optional: Load your session cookies if Instagram blocks anonymous requests
-    cookie_path = "instagram_cookies.txt"
-    if os.path.exists(cookie_path):
+    cookie_path = COOKIE_PATH if USE_COOKIES else None
+    if cookie_path and os.path.exists(cookie_path):
         try:
             # Replace with your actual username or a dummy string depending on cookie type
             #L.load_session_from_file("instagram_session", filename=cookie_path)
@@ -147,8 +171,11 @@ def download_instagram_content(url, target_dir=TARGET_DIR):
                 return "carousel", [images[0]]
                 
     except Exception as e:
-        print(f"[-] Instaloader failed: {e}")
-        sys.exit(1)
+        print(f"[!] Instaloader failed: {e}")
+        print("[*] Falling back to yt-dlp...")
+        return download_facebook_content(
+            url, target_dir, cookies=cookie_path if cookie_path and os.path.exists(cookie_path) else None
+        )
 
 def encode_file_to_base64(path, mime_type):
     """Converts a local file (image or video) to a base64 Data URL."""
@@ -162,7 +189,7 @@ def encode_file_to_base64(path, mime_type):
 
 def download_content(url, target_dir=TARGET_DIR):
     """Dispatches to the right downloader based on the URL host."""
-    if re.search(r"(facebook\.com|fb\.watch)", url):
+    if is_facebook_url(url):
         return download_facebook_content(url, target_dir)
     return download_instagram_content(url, target_dir)
 
@@ -251,24 +278,34 @@ def analyze_content(content_type, file_paths):
     print(f"[*] Preparing OpenRouter payload for {content_type}...")
     
     prompt = (
-        "Analyze this technical content and produce a structured summary in this exact format:\n\n"
+        "Analyze this social media content (it may be technical or not: tech, cooking, fitness, "
+        "education, business, lifestyle, news, etc.) and produce a structured summary in this exact format:\n\n"
         "Main Topic: (One-line description of the core subject)\n\n"
         "Key Points Explained\n\n"
         "(3-5 bullet points. Each bullet must start with a short descriptive label followed by a colon, "
         "then a concise explanation. Example: '* Hot Reload: Saves changes instantly without restarting the server.')\n\n"
-        "Tools Mentioned\n\n"
-        "(List tools grouped by type. Use these categories only when applicable:\n"
+        "Tools & Resources Mentioned\n\n"
+        "(List what is mentioned, grouped by type. Use these categories only when applicable:\n"
         "- GitHub Repository: https://url\n"
         "- Tools / CLIs: tool1, tool2\n"
         "- Libraries / Frameworks: lib1, lib2\n"
+        "- Apps / Services: app1, app2\n"
         "- Hardware / Devices: device1\n"
-        "- Other: anything that doesn't fit above\n\n"
+        "- Products / Brands: product1, brand1\n"
+        "- Books / Courses / Media: title1, title2\n"
+        "- People / Accounts: name or @handle\n"
+        "- Places: place1\n"
+        "- Links & Calls to Action: free guide, keyword to comment, discount code, link\n"
+        "- Other: anything that doesn't fit above\n"
+        "Omit the whole section if nothing is mentioned.)\n\n"
         "Rules:\n"
+        "- Write the summary in the main language of the content (spoken audio or caption)\n"
         "- No nested bold inside bullet points\n"
-        "- Be technical, specific, and concise\n"
-        "- Focus on concepts and tools, not on code\n"
-        "- Reproduce exact repo names and URLs as markdown hyperlinks\n"
-        "- Include version numbers or model sizes when visible (e.g. Python 3.12, Node 20)"
+        "- Be specific and concise; use a technical register only if the content is technical\n"
+        "- Focus on ideas, steps and takeaways; for technical content focus on concepts and tools, not on code\n"
+        "- Use the caption and the on-screen text as well as the audio\n"
+        "- Reproduce exact names and URLs as markdown hyperlinks\n"
+        "- Include version numbers, model sizes, quantities or prices when visible (e.g. Python 3.12, 200 g, 19.99 EUR)"
     )
 
     # Base structure of the message content
@@ -319,14 +356,20 @@ def main():
         i = args.index("--out")
         out_dir = args[i + 1]
         del args[i:i + 2]
-    args = [a for a in args if a != "--local"]
+    global USE_COOKIES
+    USE_COOKIES = "--no-cookie" not in args
+    args = [a for a in args if a not in ("--local", "--no-cookie")]
 
     if not args:
-        print("Usage: python analyze_reel.py <REEL_URL> [--local [--out DIR]]")
-        print("  --local  download and extract frames/caption/transcript only, no OpenRouter call")
+        print("Usage: python analyze_reel.py <REEL_URL> [--local [--out DIR]] [--no-cookie]")
+        print("  --local      download and extract frames/caption/transcript only, no OpenRouter call")
+        print("  --no-cookie  skip the instagram_cookies.txt check and download anonymously (no cookies used)")
         sys.exit(1)
 
     url = args[0]
+
+    if USE_COOKIES and not is_facebook_url(url):
+        require_instagram_cookies()
 
     if local:
         prepare_local(url, out_dir)
